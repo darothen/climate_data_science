@@ -16,8 +16,15 @@ done
 wget http://cdiac.ornl.gov/ftp/ushcn_v2.5_monthly/readme.txt
 wget http://cdiac.ornl.gov/ftp/ushcn_v2.5_monthly/ushcn-stations.txt
 
-wget http://cdiac.ornl.gov/ftp/ushcn_v2.5_monthly/ushcn2014_tob_tmax.txt.gz
-gzip -d ushcn2014_tob_tmax.txt.gz
+for obs in tmax tmin tavg prcp; do
+    wget http://cdiac.ornl.gov/ftp/ushcn_v2.5_monthly/ushcn2014_raw_${obs}.txt.gz
+    gzip -d ushcn2014_raw_${obs}.txt.gz
+done
 
-wget http://cdiac.ornl.gov/ftp/ushcn_daily/us.txt.gz
-gzip -d us.txt.gz
+# wget http://cdiac.ornl.gov/ftp/ushcn_daily/us.txt.gz
+# gzip -d us.txt.gz
+
+for obs in prcp tmax tmin; do
+    wget http://cdiac.ornl.gov/ftp/ushcn_daily/ushcn_${obs}.nc.gz
+    gzip -d ushcn_${obs}.nc.gz
+done
