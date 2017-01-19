@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pdb
 import xarray as xr
 
-def read_ushcn_data(data_fn="data/ushcn2014_tob_tmax.txt",
+def read_ushcn_data(field, data_fn="data/ushcn2014_tob_tmax.txt",
                     stat_fn="data/ushcn-stations.txt"):
     """ Read in fixed-width format data from the USHCN. """
 
@@ -53,7 +53,7 @@ def read_ushcn_data(data_fn="data/ushcn2014_tob_tmax.txt",
             .rename(columns={month+'-DM': 'DM',
                              month+'-QC': 'QC',
                              month+'-DS': 'DS',
-                             month: 'TMAX'})
+                             month: field})
         )
         month_df['month'] = i
         month_df['date'] =  (
