@@ -1,0 +1,1419 @@
+#+title:     Pythonic Data Analysis for Climate Scientists
+#+author:    Daniel Rothenberg
+#+email:     darothen@mit.edu
+#+options:   toc:2 H:2 num:2 ^:nil
+
+* Preface
+
+** What is this?
+
+   Data analysis in climate science is /hard/. 
+
+   Regardless of your specialty in the atmospheric and oceanic sciences, you probably face unique, computational research challenges. In today's world, they're inescapable:
+
+   - An atmospheric chemist working in the laboratory may generate multiple volumes of high-frequency data from different instruments, all of which need to be aligned in time and meticulously quality-controlled
+   - A meteorologist studying the evolution of storm systems may need to acquire and process terabytes worth of geospatial data - /probably/ not in the same format (grib, NetCDF, etc) - from different satellites and remote sensing systems
+   - A theoretical dynamicist might start his or her day at the whiteboard, but ultimately he or she might need to analyze a modern reanalysis to derive new quantities in order to validate their insights
+   - A climate dynamicist may need to run large ensembles of climate models, chemical transport models, or some other system which produces troves of data
+
+   No matter when we first encountered or continue to encounter these challenges - be it during an undergraduate internship, halfway through a doctoral dissertation, or maybe on the first day of our post-doc - we all experience one thing in common: *no one ever taught us how to solve them!* Computational thinking is not part of the standard undergraduate training in atmospheric science[fn:computational_thinking], nor is it covered in graduate programs. Students entering the field from a physics or engineering discipline may arrive better-equipped to tackle our challenges, but it's unlikely they'll have been explicitly shown how to face them. At best, they may have training in rudimentary programming. Meteorologists are still taught FORTRAN (if they're /lucky/ they'll be exposed to Fortran 95 or newer), and it's becoming increasingly common for them to seek training in MATLAB, Python, or some other general purpose or scripting langauge if possible.
+
+   But the majority of learning how to deal with our computational needs occurs on-the-job. And that's a big problem. For starters, it means that the tools and problem-solving techniques young scientists use will most likely be adopted from their research group. For the sake of productivity, young scientists will inherit scripts, models, and other utilities from their predecessors, and be expected to curate them and pass them down to the next generation. This leads to another critical problem: a lack of standardization. A three-decade-old research group doing everything in IDL[fn:idl] or NCL[fn:ncl], a decade-old group may be playing with MATLAB, and a new group may be on the cutting-edge, working in Python and Julia. But it's not just language-use that's fragmented. Norms and computational thinking fragments as well in our research environment, because modern approaches to solving problems or libraries which implement them may not be available on older platforms. Or - and worse - members of an older research group may simply lack familiarity and experience with version control, open-source code, or any solution a modern group may have at its disposal.
+
+   Roulette isn't a smart way to train scientists. Your ability to meet the computational demands of your research today, tomorrow, next year, and next decade shouldn't be predicated on who the post-docs in your group were during the first two years of graduate school. Instead, you need resources to learn about what the cutting edge solutions to our problems are, and what solutions are on the horizon for emerging problems. This document is meant to be one of those resources...
+   
+[fn:computational_thinking] The American Meteorological Society previously published a [[https://www.ametsoc.org/ams/index.cfm/about-ams/ams-statements/statements-of-the-ams-in-force/bachelor-s-degree-in-atmospheric-science/][statement on the training required in Bachelor's programs in the field]], but that statement is no longer in force as of September, 2015 and will likely be re-evaluated in the future.
+
+[fn:idl] The [[http://www.harrisgeospatial.com/Support/ProductsUpdateDetails/TabId/1997/ArtMID/7326/ArticleID/14972/Whats-New-in-IDL-86.aspx][Interactive Data Language]], a proprietary language sold by Harris.
+
+[fn:ncl] The [[https://www.ncl.ucar.edu/][NCAR Command Language]], a free, portable language designed for the atmospheric scince community.
+
+** License
+
+   I want to encourage people to share, criticize, and improve this document, so it is licensed under a Creative Commons license ([[https://creativecommons.org/licenses/by-nc-sa/4.0/][CC-BY-SA-4.0]]). You are free to *share* (copy and redistribute in any medium or format) and *adapt* (remix, transform, and build upon the material), as long as you properly *attrbute* it (give appropriate credit to the original author, Daniel Rothenberg, and indicate if any changes were made), refrain from using it from *commerical purposes*, and re-distribute under the *same license* as the original. Source code samples and material is independently licensed under a permissive [[https://opensource.org/licenses/MIT][MIT]] license.
+
+** Code Setup
+
+#+RESULTS:
+: 3.5.2 |Continuum Analytics, Inc.| (default, Jul  2 2016, 17:52:12) 
+: [GCC 4.2.1 Compatible Apple LLVM 4.2 (clang-425.0.28)]
+
+#+BEGIN_SRC python :session :exports none
+import matplotlib.pyplot as plt
+plt.style.use(['seaborn-ticks', 'seaborn-talk'])
+
+import numpy as np
+import pandas as pd
+import xarray as xr
+
+pd.set_option('precision', 2)
+np.set_printoptions(precision=2, suppress=True, nanstr='nan', infstr='inf', threshold=5)
+#+END_SRC
+
+#+RESULTS:
+
+* Part 1: Pandas
+
+** Basics and Overview
+
+*** Series
+
+ Pandas implements two special data structures to help organize, contain, and manipulate your data. The first of these is a *Series*. A *Series* is a 1-dimensional, array-like container for any type of data.
+
+ #+BEGIN_SRC python :session
+ temperature_data = [21, 25, 16, 22, 16, 21, 15]
+ temperature_series = pd.Series(temperature_data)
+ temperature_series
+ #+END_SRC
+
+ #+RESULTS:
+ : 0    21
+ : 1    25
+ : 2    16
+ : 3    22
+ : 4    16
+ : 5    21
+ : 6    15
+ : dtype: int64
+
+ Notice that we created this *Series* just from a list of integers. But the *Series* knows a bit more than that; it has two additional components in its output. First, pandas knew that all of our data were ~int64~ types from Python, and kept track of tht for us. Second, notice that the *Series* printed /two/ columns to the screen. The second column is our original data, but the first column is a list of sequential numbers. This is an *index*. In this example, pandas automatically set up a 0-based index to use with our data. However, if we have special values that we might want to use as our index, we can tell pandas to use those instead
+
+ #+BEGIN_SRC python :session
+ days_of_the_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday',
+                     'Friday', 'Saturday', 'Sunday']
+ temperature_series_idx = pd.Series(temperature_data, index=days_of_the_week)
+ temperature_series_idx 
+ #+END_SRC
+
+ #+RESULTS:
+ : Monday       21
+ : Tuesday      25
+ : Wednesday    16
+ : Thursday     22
+ : Friday       16
+ : Saturday     21
+ : Sunday       15
+ : dtype: int64
+
+ Since our index and data had the same shape (number of list items), pandas aligned them for us automatically. If we ever want to get our index or values out of the *Series*, we can do so with the ~.values~ and ~.index~ attributes attached our our *Series* object.
+
+ #+BEGIN_SRC python :session
+ temperature_series_idx.values
+ #+END_SRC
+
+ #+RESULTS:
+ | 21 | 25 | 16 | ... | 16 | 21 | 15 |
+
+ #+BEGIN_SRC python :session
+ temperature_series.index
+ #+END_SRC
+
+ #+RESULTS:
+ : RangeIndex(start=0, stop=7, step=1)
+
+ #+BEGIN_SRC python :session
+ temperature_series_idx.index
+ #+END_SRC
+
+ #+RESULTS:
+ : Index(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+ :        'Sunday'],
+ :       dtype='object')
+
+ Having labeled indices can be a major advantage when working with complex datasets. If you restrict yourselves to Python built-in types (lists, sets, dictionaries, etc) or NumPy arrays, then you likely need to keep track of a handful of separate containers for your data, and use complicated iteration and indexing to access the items you care about. With pandas, you can immediately link metadata such as labels directly to your data. A *Series* is a simple example of this.
+
+ Suppose you wanted to access the temperature data from Thursday, but you didn't know which item in ~temperature_data~ corresponded to that day. A pure-Python way to figure it our might be to loop over the ~days_of_the_week~ list, find the index of "Thursday", and use that index to access into ~temperature_data~:
+
+ #+BEGIN_SRC python :session
+ for idx, val in enumerate(days_of_the_week):
+     if val == "Thursday": break
+
+ idx, temperature_data[idx]
+ #+END_SRC
+
+ #+RESULTS:
+ | 3 | 22 |
+
+ Using NumPy improves on this situation by enabling "fancy indexing." Although the focus of this work is not on NumPy, fancy indexing and array slicing is a powerful feature also implemented in pandas, so a quick example is worth showing:
+
+ #+BEGIN_SRC python :session
+ temperature_data_np = np.array(temperature_data)
+ days_of_the_week_np = np.array(days_of_the_week)
+
+ temperature_data_np[days_of_the_week_np == 'Thursday']
+ #+END_SRC
+
+ #+RESULTS:
+ | 22 |
+
+ Behind the scenes, NumPy is checking each entry of ~days_of_the_week_np~ to see if it is equal to "Thursday". This creates a boolean mask:
+
+ #+BEGIN_SRC python :session
+ days_of_the_week_np == 'Thursday'
+ #+END_SRC
+
+ #+RESULTS:
+ | False | False | False | ... | False | False | False |
+
+ When we pass this mask into ~temperature_data_np~, it gets rid of all the values corresponding to =False=, leaving just the value we want. For many operations, pandas implements the exact same sort of indexing functionality, so NumPy tricks apply directly
+
+ #+BEGIN_SRC python :session
+ temperature_series_idx[days_of_the_week_np == 'Thursday']
+ #+END_SRC
+
+ #+RESULTS:
+ : Thursday    22
+ : dtype: int64
+
+ #+BEGIN_SRC python :session
+ temperature_series_idx[temperature_series_idx > 20]
+ #+END_SRC
+
+ #+RESULTS:
+ : Monday      21
+ : Tuesday     25
+ : Thursday    22
+ : Saturday    21
+ : dtype: int64
+
+ /But/, we can do one better. When we use nice labels to construct the index for our *Series*, we can use those labels directly to access our data:
+
+ #+BEGIN_SRC python :session
+ temperature_series_idx['Thursday']
+ #+END_SRC
+
+ #+RESULTS:
+ : 22
+
+ *Series* are similar to NumPy arrays in other ways. Most importantly, you can perform scalar mathematical operations on while preserving your index. 
+
+ #+BEGIN_SRC python :session
+ def f_to_c(temp_f):
+     """ Convert temperature from degrees F to degrees C """
+     temp_c = (5./9.) * (temp_f - 32)
+     return temp_c
+
+ f_to_c(np.array(temperature_data))
+ #+END_SRC
+
+ #+RESULTS:
+ | -6.11 | -3.89 | -8.89 | ... | -8.89 | -6.11 | -9.44 |
+
+ #+BEGIN_SRC python :session
+ f_to_c(temperature_series_idx)
+ #+END_SRC
+
+ #+RESULTS:
+ : Monday      -6.111111
+ : Tuesday     -3.888889
+ : Wednesday   -8.888889
+ : Thursday    -5.555556
+ : Friday      -8.888889
+ : Saturday    -6.111111
+ : Sunday      -9.444444
+ : dtype: float64
+
+ You can also perform reduction operations, although in many cases the implied changes to your labeled index won't be defined or captured.
+
+ #+BEGIN_SRC python :session
+ np.mean(temperature_series_idx)
+ #+END_SRC
+
+ #+RESULTS:
+ : 19.428571428571427
+
+ Note that we receive a float back - we've totally diminished our index. Common mathematical operations and descriptive statistical functions are already implemented into any *Series* you create.
+
+ #+BEGIN_SRC python :session
+ x = (
+  temperature_series_idx.min(),
+  temperature_series_idx.quantile(0.33),
+  temperature_series_idx.mean(), 
+  temperature_series_idx.median(),
+  temperature_series_idx.quantile(0.66),
+  temperature_series_idx.max()
+ )
+ x
+ #+END_SRC
+
+ #+RESULTS:
+ | 15 | 16.0 | 19.428571428571427 | 21.0 | 21.0 | 25 |
+
+*** DataFrame 
+ 
+*Series* provide the building blocks for pandas' workhorse container, the *DataFrame*. In its simplest application, a *DataFrame* is a set of *Series* that have been glued together on a common index. Think, columns aligned on a spread sheet. In fact, the "structure" of a DataFrame reflects these components
+
+Just like there are many ways to create a spreadsheet, there are many ways to create a *DataFrame*. If you already have a few *Series* of data (or lists/arrays/iterables/ that could be used to generate a set of *Series*), then the easiest way to combine that data into a *DataFrame* is by using the dictionary constructor:
+
+#+BEGIN_SRC python :session
+data = {
+    'high_temp': [21, 35, 32, 40, 20],
+    'low_temp': [14, 20, 29, 25, -1],
+    'station': ['KEYW', 'KMDT', 'KGRI', 'KRNO', 'KTVC']
+}
+df = pd.DataFrame(data)
+df
+#+END_SRC
+
+#+RESULTS:
+:    high_temp  low_temp station
+: 0         21        14    KEYW
+: 1         35        20    KMDT
+: 2         32        29    KGRI
+: 3         40        25    KRNO
+: 4         20        -1    KTVC
+
+Here, we have aligned all of our data common 0-index. The keys in our dictionary became the names of the /columns/, and each of the data lists we provided were transformed into corresponding *Series*. As with the *Series* constructor, we can pass a specific index if we know it.
+
+#+BEGIN_SRC python :session
+df = pd.DataFrame(data,
+                  index=['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'])
+df
+#+END_SRC
+
+#+RESULTS:
+:         high_temp  low_temp station
+: Week 1         21        14    KEYW
+: Week 2         35        20    KMDT
+: Week 3         32        29    KGRI
+: Week 4         40        25    KRNO
+: Week 5         20        -1    KTVC
+
+A slightly more sophisticated way to construct a *DataFrame* is to pass a nested dictionary. This allows you to assign specific indices to different values, and forces pandas to do the heavy lifting involved in aligning them.
+
+#+BEGIN_SRC python :session
+nest_data = {
+   'high_temp': { 'Week 1': 21, 'Week 2': 35, 'Week 3': 32 },
+   'low_temp': { 'Week 2': 20, 'Week 4': 25, 'Week 5': -1 },
+   'station': { 'Week 1': 'KEYW', 'Week 3': 'KGRI', 'Week 4': 'KRNO'},
+}
+df = pd.DataFrame(nest_data)
+df
+#+END_SRC
+
+#+RESULTS:
+:         high_temp  low_temp station
+: Week 1       21.0       NaN    KEYW
+: Week 2       35.0      20.0     NaN
+: Week 3       32.0       NaN    KGRI
+: Week 4        NaN      25.0    KRNO
+: Week 5        NaN      -1.0     NaN
+
+Notice that wherever we had missing values, pandas filled in a "missing value" (`NaN` by default). It took care of all the alignment behind the scenes. The dictionary and nested dictionary idiom is extremely powerful, especially if you're combining data that you previously constructed. For instance, perhaps you have iterated over a great number of timeseries outputs and formed a giant set of data with a common index. By passing a dictionary of data *Series*, you can quickly align and further process this data simultaneously.
+
+There are two other, NumPy-related ways to construct a *DataFrame*. They are worth mentioning, since you may inherit code or data that fits these use cases:
+
+*2D Array*
+
+If you have a matrix of data, you can construct a *DataFrame* and pass both row and column labels.
+
+#+BEGIN_SRC python :session
+mat = np.random.randint(-10, 20, size=(5, 3))
+df_mat = pd.DataFrame(mat, columns=['x', 'y', 'vel'], 
+                      index=pd.Index([1, 2, 3, 4, 5], name='sample'))
+df_mat
+#+END_SRC
+
+#+RESULTS:
+:          x   y  vel
+: sample             
+: 1       14   9   -5
+: 2       18   0    2
+: 3      -10   3    5
+: 4       17 -10   11
+: 5       15  -8  -10
+
+Note that here we created an *Index* explicitly. This let us assign it a name, which may be useful for recording what is contained in our *DataFrame*.
+
+*Structured or Record Array*
+
+[[https://docs.scipy.org/doc/numpy/user/basics.rec.html][Record arrays]] are special data structures in NumPy which let you manipulate data via named fields. Coming from the C or Fortran world, they are very similar to the sorts of derived types that are used to consolidate numerical data in modeling applications. Often times, it is more convenient to inherit this structure when interfacing a Python code with a C or Fortran code, and NumPy offers special features which make further manipulation of the data contained in the structure very easy.
+
+#+BEGIN_SRC python :session
+dt = dtype=[('x', '<f8'), ('y', '<f8'), ('vel', '<f8')]
+mat_rec = np.rec.fromarrays(mat.T.tolist(), dt)
+df_mat_rec = pd.DataFrame(mat_rec, index=pd.Index(range(1, 6), name='sample'))
+df_mat_rec
+#+END_SRC
+
+#+RESULTS:
+:            x     y   vel
+: sample                  
+: 1       14.0   9.0  -5.0
+: 2       18.0   0.0   2.0
+: 3      -10.0   3.0   5.0
+: 4       17.0 -10.0  11.0
+: 5       15.0  -8.0 -10.0
+
+
+Don't worry about the NumPy-foo used to create the record array. Just be aware that it's easy to convert such structures into something pandas can natively work with.
+
+*DataFrame*\s have a simple 2D structure consisting of a set of /columns/ and an /index./
+
+#+BEGIN_SRC python :session
+df.columns
+#+END_SRC
+
+#+RESULTS:
+: Index(['high_temp', 'low_temp', 'station'], dtype='object')
+
+#+BEGIN_SRC python :session
+df.index
+#+END_SRC
+
+#+RESULTS:
+: Index(['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'], dtype='object')
+
+Notice that both of these labeling structures return an *Index* when we request them. That leads to an important observation: the rows and columns of a *DataFrame* serve parallel purpose. They're both labels across a different dimension of your tabular data. As a result, any *DataFrame* has a /transpose/ which swaps the index and the columns
+
+#+BEGIN_SRC python :session
+df.T
+#+END_SRC
+
+#+RESULTS:
+:           Week 1 Week 2 Week 3 Week 4 Week 5
+: high_temp     21     35     32    NaN    NaN
+: low_temp     NaN     20    NaN     25     -1
+: station     KEYW    NaN   KGRI   KRNO    NaN
+
+The interior of a *DataFrame* is a 2D matrix of /values/
+
+#+BEGIN_SRC python :session
+df.values
+#+END_SRC
+
+#+RESULTS:
+| 21.0 |  nan | KEYW |
+| 35.0 | 20.0 | nan  |
+| 32.0 |  nan | KGRI |
+|  nan | 25.0 | KRNO |
+|  nan | -1.0 | nan  |
+
+Pandas tries to be nice when returning this matrix, and return a NumPy array with a single, consistent datatype. In our case using mixed-types, the array will have the =object= type, which may make further analysis with it a bit cumbersome. As we'll see soon, though, the vast majority of analyses you'd want to perform on this data can be done directly within the *DataFrame* structure.
+
+There's one important usage difference between a *DataFrame* and a *Series* though. Recall that *Series* had a dict-like interface accessing data a specific index value: =my_series[my_index_value]=. With a *DataFrame*, this is one way we can access specific /columns/, not rows.
+
+#+BEGIN_SRC python :session
+df['station']
+#+END_SRC
+
+#+RESULTS:
+: Week 1    KEYW
+: Week 2     NaN
+: Week 3    KGRI
+: Week 4    KRNO
+: Week 5     NaN
+: Name: station, dtype: object
+
+However, each column also becomes an /attribute/ of the *DataFrame*, providing a second way to access the data.
+
+#+BEGIN_SRC python :session
+df.station
+#+END_SRC
+
+#+RESULTS:
+: Week 1    KEYW
+: Week 2     NaN
+: Week 3    KGRI
+: Week 4    KRNO
+: Week 5     NaN
+: Name: station, dtype: object
+
+To access values along the index, you can use several different techniques, which we'll cover in more detail shortly
+
+#+BEGIN_SRC python :session
+df.loc['Week 1'], df.ix['Week 1'], df.ix[0], df.iloc[0]
+#+END_SRC
+
+#+RESULTS:
+| high_temp | 21 | low_temp | NaN | station | KEYW | Name: | Week | 1 | dtype: | object | high_temp | 21 | low_temp | NaN | station | KEYW | Name: | Week | 1 | dtype: | object | high_temp | 21 | low_temp | NaN | station | KEYW | Name: | Week | 1 | dtype: | object | high_temp | 21 | low_temp | NaN | station | KEYW | Name: | Week | 1 | dtype: | object |
+
+*** Reading in DataFrames  
+
+    Out-of-the-box, pandas offers a [[http://pandas.pydata.org/pandas-docs/stable/io.html][comprehensive suite]] of helper functions for reading in your data. The two most important functions - and the one's you'll probably use the most often - are =read_csv()= and =read_table()=, which accept a similar set of arguments:
+
+    - *filepath_or_buffer*: a path to a filename, or some other object with a =read()= method.
+    - *sep*: delimiter separating values in your data. By default, this will be ',' for =read_csv()= and '\t' for =read_table()=, although you can pass it any regular expression. If you don't pass one, pandas will try to infer it automatically.
+    - *delim_whitespace*: should pandas include whitespace as a delimiter?
+    - *header*: row numbers to use as column names, and where the data starts in the file
+    - *names*: a list of column names to use; if the data has no header, this should be used with =header=None=
+    - *index_col*: column to use as row labels
+    - *skip{rows,footer}*: skip beginning/ending rows.
+
+   Several other parameters are available to handle parsing data on read, converting data, parsing date/timestamps, handling missing values, commented lines, and much more. 
+
+   To illustrate this data in action, let's try reading in the GISTEMP global surface temperature record. This data comes in two formats: tabular ASCII text and comma-separated value, each with its own idiosyncrasies.
+
+*CSV*
+
+#+BEGIN_SRC shell
+head -n 10 data/GLB.Ts+dSST.csv
+#+END_SRC
+
+#+RESULTS:
+| Land-Ocean: Global Means |       |       |       |       |       |       |       |       |       |       |       |       |       |       |       |       |       |       |
+|                     Year |   Jan |   Feb |   Mar |   Apr |   May |   Jun |   Jul |   Aug |   Sep |   Oct |   Nov |   Dec |   J-D |   D-N |   DJF |   MAM |   JJA |   SON |
+|                     1880 |  -0.3 | -0.21 | -0.18 | -0.27 | -0.14 | -0.29 | -0.24 | -0.07 | -0.17 | -0.16 | -0.19 | -0.22 |  -0.2 |   *** |   *** |  -0.2 |  -0.2 | -0.17 |
+|                     1881 |  -0.1 | -0.14 |  0.01 | -0.03 | -0.04 | -0.29 | -0.07 | -0.03 | -0.09 |  -0.2 | -0.26 | -0.16 | -0.12 | -0.12 | -0.15 | -0.02 | -0.13 | -0.18 |
+|                     1882 |  0.09 |  0.08 |  0.01 |  -0.2 | -0.18 | -0.25 | -0.11 |  0.03 | -0.01 | -0.22 | -0.21 | -0.25 |  -0.1 | -0.09 |   0.0 | -0.12 | -0.11 | -0.15 |
+|                     1883 | -0.34 | -0.42 | -0.18 | -0.24 | -0.25 | -0.12 | -0.08 | -0.13 | -0.18 | -0.11 |  -0.2 | -0.18 |  -0.2 | -0.21 | -0.34 | -0.22 | -0.11 | -0.17 |
+|                     1884 | -0.18 | -0.12 | -0.34 | -0.36 | -0.32 | -0.38 | -0.34 | -0.26 | -0.23 | -0.22 | -0.29 | -0.29 | -0.28 | -0.27 | -0.16 | -0.34 | -0.32 | -0.25 |
+|                     1885 | -0.65 | -0.29 | -0.23 | -0.44 | -0.41 |  -0.5 | -0.29 | -0.27 | -0.19 | -0.19 | -0.22 | -0.06 | -0.31 | -0.33 | -0.41 | -0.36 | -0.35 |  -0.2 |
+|                     1886 | -0.42 | -0.46 | -0.41 | -0.29 | -0.27 | -0.39 | -0.16 | -0.31 | -0.19 | -0.25 | -0.26 | -0.25 | -0.31 | -0.29 | -0.31 | -0.32 | -0.29 | -0.23 |
+|                     1887 | -0.66 | -0.48 | -0.31 | -0.37 | -0.33 |  -0.2 | -0.19 | -0.27 | -0.19 | -0.32 | -0.25 | -0.38 | -0.33 | -0.32 | -0.46 | -0.34 | -0.22 | -0.25 |
+
+CSV data is usually pretty straightforward to handle. 
+
+#+BEGIN_SRC python :session
+df = pd.read_csv("data/GLB.Ts+dSST.csv", 
+                 skiprows=1, header=0, index_col=0, na_values='***')
+df.head()
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+       Jan   Feb   Mar   Apr   May   Jun   Jul   Aug   Sep   Oct   Nov   Dec  \
+Year                                                                           
+1880 -0.30 -0.21 -0.18 -0.27 -0.14 -0.29 -0.24 -0.07 -0.17 -0.16 -0.19 -0.22   
+1881 -0.10 -0.14  0.01 -0.03 -0.04 -0.29 -0.07 -0.03 -0.09 -0.20 -0.26 -0.16   
+1882  0.09  0.08  0.01 -0.20 -0.18 -0.25 -0.11  0.03 -0.01 -0.22 -0.21 -0.25   
+1883 -0.34 -0.42 -0.18 -0.24 -0.25 -0.12 -0.08 -0.13 -0.18 -0.11 -0.20 -0.18   
+1884 -0.18 -0.12 -0.34 -0.36 -0.32 -0.38 -0.34 -0.26 -0.23 -0.22 -0.29 -0.29   
+
+       J-D   D-N   DJF   MAM   JJA   SON  
+Year                                      
+1880 -0.20   NaN   NaN -0.20 -0.20 -0.17  
+1881 -0.12 -0.12 -0.15 -0.02 -0.13 -0.18  
+1882 -0.10 -0.09  0.00 -0.12 -0.11 -0.15  
+1883 -0.20 -0.21 -0.34 -0.22 -0.11 -0.17  
+1884 -0.28 -0.27 -0.16 -0.34 -0.32 -0.25  
+#+end_example
+
+It's that easy. We chopped off the metadata with =header=0=, inferred the columns and the index using =header= and =index_col=, and even handled missing values with =na_values=. 
+
+*Tabular*
+
+#+BEGIN_SRC shell
+head -n 10 data/GLB.Ts+dSST.txt
+#+END_SRC
+
+#+RESULTS:
+| GLOBAL   | Land-Ocean  | Temperature  | Index    | in   |        0.01 | degrees    | Celsius      | base | period: | 1951-1980 |     |         |     |     |      |     |     |     |      |
+|          |             |              |          |      |             |            |              |      |         |           |     |         |     |     |      |     |     |     |      |
+| sources: | GHCN-v3     | 1880-11/2016 | +        | SST: |       ERSST | v4         | 1880-11/2016 |      |         |           |     |         |     |     |      |     |     |     |      |
+| using    | elimination | of           | outliers | and  | homogeneity | adjustment |              |      |         |           |     |         |     |     |      |     |     |     |      |
+| Notes:   | 1950        | DJF          | =        | Dec  |        1949 | -          | Feb          | 1950 | ;       |     ***** |   = | missing |     |     |      |     |     |     |      |
+|          |             |              |          |      |             |            |              |      |         |           |     |         |     |     |      |     |     |     |      |
+| AnnMean  |             |              |          |      |             |            |              |      |         |           |     |         |     |     |      |     |     |     |      |
+| Year     | Jan         | Feb          | Mar      | Apr  |         May | Jun        | Jul          |  Aug | Sep     |       Oct | Nov |     Dec | J-D | D-N | DJF  | MAM | JJA | SON | Year |
+| 1880     | -30         | -21          | -18      | -27  |         -14 | -29        | -24          |   -7 | -17     |       -16 | -19 |     -22 | -20 | *** | **** | -20 | -20 | -17 | 1880 |
+| 1881     | -10         | -14          | 1        | -3   |          -4 | -29        | -7           |   -3 | -9      |       -20 | -26 |     -16 | -12 | -12 | -15  |  -2 | -13 | -18 | 1881 |
+
+The tabular data has 7 rows of "header" data or metainformation. The 7th row indicates that the table is split into two halves: A set of monthly means, then a set of annual means aggregated over different seasons and ultimately the full year. Upon inspection, the first column would make a great index, since it gives the year for the data. The data is further divided up into 20 year chunks.
+
+This is a pretty challenging dataset to read in. The best thing to do would be to pre-process it by hand, cutting out the rows that we don't need. However, we can do a lot of this via Python and pandas, as shown below:
+
+#+BEGIN_SRC python :session
+df = pd.read_table('data/GLB.Ts+dSST.txt', 
+                   delim_whitespace=True, index_col=0, skiprows=8, 
+                   names=['Year', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'July',
+                          'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 
+                   header=None, usecols=range(13), engine='python', skipfooter=7,
+                   na_values='****')
+df = df.drop('Year', axis=0)
+# df.values = df.values.astype(np.float)
+df = df.astype('float')
+df.index = df.index.values.astype(np.int)
+df.index.name = 'Year'
+df.head()
+#+END_SRC
+
+#+RESULTS:
+:        Jan   Feb   Mar   Apr   May   Jun  July   Aug   Sep   Oct   Nov   Dec
+: Year                                                                        
+: 1880 -30.0 -21.0 -18.0 -27.0 -14.0 -29.0 -24.0  -7.0 -17.0 -16.0 -19.0 -22.0
+: 1881 -10.0 -14.0   1.0  -3.0  -4.0 -29.0  -7.0  -3.0  -9.0 -20.0 -26.0 -16.0
+: 1882   9.0   8.0   1.0 -20.0 -18.0 -25.0 -11.0   3.0  -1.0 -22.0 -21.0 -25.0
+: 1883 -34.0 -42.0 -18.0 -24.0 -25.0 -12.0  -8.0 -13.0 -18.0 -11.0 -20.0 -18.0
+: 1884 -18.0 -12.0 -34.0 -36.0 -32.0 -38.0 -34.0 -26.0 -23.0 -22.0 -29.0 -29.0
+
+That's it! 
+
+*** Indexing and Selections
+
+    The most useful feature of pandas is the ability to programatically subset data. Although very powerful, these features are often times context-dependent. However, the vast majority of what you may wish to do can be accomplished using  three different "getter" methods: =.ix=, =.iloc=, and =.loc=.
+
+*.ix*
+
+The special indexing field =ix= allows you to do NumPy-like label indexing on both the rows and columns, using either index locations or the actual label values, following the syntax =df.ix[{slice or list of row labels}[, slice or list of column labels]]=. For instance, to select all the data up to 1900, you could request
+
+#+BEGIN_SRC python :session
+df.ix[:1900]
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+      Jan  Feb  Mar  Apr  May  Jun July  Aug  Sep  Oct  Nov  Dec
+Year                                                            
+1880  -30  -21  -18  -27  -14  -29  -24   -7  -17  -16  -19  -22
+1881  -10  -14    1   -3   -4  -29   -7   -3   -9  -20  -26  -16
+1882    9    8    1  -20  -18  -25  -11    3   -1  -22  -21  -25
+1883  -34  -42  -18  -24  -25  -12   -8  -13  -18  -11  -20  -18
+1884  -18  -12  -34  -36  -32  -38  -34  -26  -23  -22  -29  -29
+1885  -65  -29  -23  -44  -41  -50  -29  -27  -19  -19  -22   -6
+1886  -42  -46  -41  -29  -27  -39  -16  -31  -19  -25  -26  -25
+1887  -66  -48  -31  -37  -33  -20  -19  -27  -19  -32  -25  -38
+1888  -42  -42  -47  -28  -22  -20   -9  -11   -8    2    0  -12
+1889  -20   15    5    5   -2  -12   -5  -17  -18  -21  -30  -31
+1890  -48  -48  -41  -37  -48  -27  -29  -36  -36  -22  -37  -30
+1891  -46  -49  -15  -25  -17  -22  -22  -21  -13  -23  -37   -2
+1892  -26  -15  -36  -35  -25  -20  -28  -19  -25  -16  -50  -29
+1893  -68  -51  -24  -32  -35  -24  -14  -23  -18  -16  -17  -38
+1894  -55  -32  -22  -42  -30  -44  -32  -28  -22  -17  -25  -22
+1895  -44  -43  -29  -22  -23  -25  -17  -16   -2  -10  -15  -12
+1896  -23  -15  -30  -32  -20  -14   -6   -9   -5    4  -16  -12
+1897  -22  -19  -12   -1   -1  -13   -5   -3   -5   -9  -18  -26
+1898   -7  -34  -56  -33  -36  -21  -23  -23  -19  -32  -35  -22
+1899  -18  -40  -35  -21  -21  -26  -13   -4   -1    0   12  -27
+1900  -40   -8    2  -15   -6  -15   -9   -4    1    8  -13  -14
+#+end_example
+
+To select all the June-July-August data from the 2000s, you could add a column selection here:
+
+#+BEGIN_SRC python :session
+df.ix[2000:2010, ['Jun', 'July', 'Aug']]
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+     Jun July Aug
+Year             
+2000  43   41  43
+2001  54   61  48
+2002  54   62  55
+2003  48   55  66
+2004  42   26  44
+2005  66   65  62
+2006  64   53  71
+2007  58   62  60
+2008  48   60  44
+2009  65   71  66
+2010  64   62  65
+#+end_example
+
+Alternatively, you could use the 0-based index values on the columns to accomplish the same thing
+
+#+BEGIN_SRC python :session
+df.ix[2000:2010, [5, 6, 7]]
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+     Jun July Aug
+Year             
+2000  43   41  43
+2001  54   61  48
+2002  54   62  55
+2003  48   55  66
+2004  42   26  44
+2005  66   65  62
+2006  64   53  71
+2007  58   62  60
+2008  48   60  44
+2009  65   71  66
+2010  64   62  65
+#+end_example
+
+*.iloc*
+
+To /explicitly/ use index-based indexing, it's recommended to use the =iloc= getter. Like =ix=, you can pass it both index and column values, but only the index values - no labels. 
+
+#+BEGIN_SRC python :session
+df.iloc[20:30, [5, 6, 7]]
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+      Jun July  Aug
+Year               
+1900  -15   -9   -4
+1901  -10   -9  -13
+1902  -35  -26  -28
+1903  -45  -31  -44
+1904  -50  -49  -44
+1905  -32  -25  -21
+1906  -22  -27  -19
+1907  -44  -35  -37
+1908  -39  -35  -45
+1909  -52  -43  -30
+#+end_example
+
+*.loc*
+
+To /explicitly/ use label-based indexing, you should defer to the =loc= getter. Again, you can pass both index and column values.
+
+#+BEGIN_SRC python :session
+df.loc[1900:1910, ['Jun', 'July', 'Aug']]
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+      Jun July  Aug
+Year               
+1900  -15   -9   -4
+1901  -10   -9  -13
+1902  -35  -26  -28
+1903  -45  -31  -44
+1904  -50  -49  -44
+1905  -32  -25  -21
+1906  -22  -27  -19
+1907  -44  -35  -37
+1908  -39  -35  -45
+1909  -52  -43  -30
+1910  -37  -31  -34
+#+end_example
+
+In addition to index-based selection, you can use boolean-based or "fancy" indexing, like we saw in the *Series* examples. What's particularly useful here, though, is that you can select data based on specific columns. For instance, suppose we wanted to subset just the years where the August data was warmer than the July data. We could try
+
+#+BEGIN_SRC python :session
+df_sub = df[df.Aug > df.July]
+len(df_sub)
+#+END_SRC
+
+#+RESULTS:
+: 58
+
+To apply multiple boolean masks, you can use the bitwise and operator, =&=, or the bitwise or operator, =|=.
+
+#+BEGIN_SRC python :session
+df_sub = df[(df.Jan > 0) & (df.Aug > df.July)]
+len(df_sub)
+#+END_SRC
+
+#+RESULTS:
+: 28
+
+If you have categorical data instead of numerical data in one column, it's often helpful to select just a few values. A useful helper function in this case is the =isin()= method.
+
+#+BEGIN_SRC python :session
+df_cat = pd.melt(df.reset_index(), id_vars='Year', 
+                 value_vars=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'July', 
+                             'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 
+                 var_name='month',value_name='temperature')
+x = df_cat[(df_cat.month.isin(['Jan', 'July', 'Dec'])) &
+           (df_cat.Year < 1900)]
+len(x)
+#+END_SRC
+
+#+RESULTS:
+: 60
+
+These basic indexing concepts can be extended and applied to more advanced applications. As a preview, we can consider the case of a *MultiIndex*, which is a type of hierarchical index we can construct for a *Series* or *DataFrame*. Using the *DataFrame* we were just playing with, we can transform the data to have a two-part index consisting of years and months. To enforce ordering in our months, we'll build a /Categorical/ *Series*.
+
+#+BEGIN_SRC python :session
+df_cat['month'] = df_cat['month'].astype("category", ordered=True,
+                                         categories=["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                                     "July", "Aug", "Sep", "Oct", "Nov", "Dec"])
+df_cat_mi = df_cat.set_index(['Year', 'month']).sortlevel()
+df_cat_mi.head(13)
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+            temperature
+Year month             
+1880 Jan          -30.0
+     Feb          -21.0
+     Mar          -18.0
+     Apr          -27.0
+     May          -14.0
+     Jun          -29.0
+     July         -24.0
+     Aug           -7.0
+     Sep          -17.0
+     Oct          -16.0
+     Nov          -19.0
+     Dec          -22.0
+1881 Jan          -10.0
+#+end_example
+
+
+Sometimes this sort of hierarchical indexing is extremely useful. In our case - which is a timeseries - our data is linear, so we don't necessarily need this sort of structure. We'll see an example in a bit which takes advantage of this, though. For now, it's worth mentioning that indexing and slicing extends easily to these sorts of *MultiIndex*ed *DataFrame*s when using the *.loc* accessor, with the help of the Python builtin ~slice~ operator.
+
+#+BEGIN_SRC python :session
+x = df_cat_mi.loc[(slice(1900, 1905), slice('Jan', 'Mar')), :]
+x
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+            temperature
+Year month             
+1900 Jan          -40.0
+     Feb           -8.0
+     Mar            2.0
+1901 Jan          -30.0
+     Feb           -5.0
+     Mar            5.0
+1902 Jan          -21.0
+     Feb           -5.0
+     Mar          -29.0
+1903 Jan          -29.0
+     Feb           -8.0
+     Mar          -23.0
+1904 Jan          -65.0
+     Feb          -55.0
+     Mar          -47.0
+1905 Jan          -38.0
+     Feb          -60.0
+     Mar          -25.0
+#+end_example
+
+** Arithmetic
+   
+   Just like with NumPy arrays - and as we've already seen - you can apply arithmetical operations directly to pandas data structures. As in NumPy, pandas will vectorize calculations where possible; under-the-hood, it implements high-performance C routines to help this process, and can even multi-process in some limited (but growing) cases (there is a whole world of toolkits that automate that process to a far greater extent).
+
+   Consider the global-average temperature from before, which is provided as anomalies in 1/100 deg C. We can easily convert to equivalent units in Fahrenheit using the formula
+
+$$\Delta F =  \frac{1}{100}\frac{9}{5} \Delta C^*$$
+
+
+#+BEGIN_SRC python :session
+res = (1./100.)*(9./5.) * df_cat_mi
+res.head()
+#+END_SRC
+
+#+RESULTS:
+:             temperature
+: Year month             
+: 1880 Jan         -0.540
+:      Feb         -0.378
+:      Mar         -0.324
+:      Apr         -0.486
+:      May         -0.252
+
+
+We can also wrap this as a function, and apply directly to a *DataFrame*
+
+#+BEGIN_SRC python :session
+def calc_f_anom(c_anom):
+    return c_anom*(1./100.)*(9./5.)
+
+res = calc_f_anom(df_cat_mi)
+res.head()
+#+END_SRC
+
+#+RESULTS:
+:             temperature
+: Year month             
+: 1880 Jan         -0.540
+:      Feb         -0.378
+:      Mar         -0.324
+:      Apr         -0.486
+:      May         -0.252
+
+Ufuncs and vectorized functions from NumPy also work (generally) pretty well with the data structures in pandas
+
+#+BEGIN_SRC python :session
+res = df_cat_mi - np.mean(df_cat_mi)
+res.head()
+#+END_SRC
+
+#+RESULTS:
+:             temperature
+: Year month             
+: 1880 Jan     -32.309799
+:      Feb     -23.309799
+:      Mar     -20.309799
+:      Apr     -29.309799
+:      May     -16.309799
+
+However, the world of pandas offers a distinct advantage over NumPy: we can automatically handle alignment of our different data sets based on our labeled indices. To illustrate this, consider this simple example where we have two *Series* which overlap on just a few of their indices.
+
+#+BEGIN_SRC python :session
+x = pd.Series(np.random.randint(0, 10, 6), index=range(6))
+y = pd.Series(np.random.randint(0, 10, 6), index=range(3, 9))
+
+df = pd.DataFrame({'x': x, 'y': y})
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+     x    y
+0  9.0  NaN
+1  2.0  NaN
+2  8.0  NaN
+3  0.0  3.0
+4  1.0  1.0
+5  3.0  6.0
+6  NaN  4.0
+7  NaN  2.0
+8  NaN  1.0
+#+end_example
+
+#+BEGIN_SRC python :session
+x + y
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+0    NaN
+1    NaN
+2    NaN
+3    3.0
+4    2.0
+5    9.0
+6    NaN
+7    NaN
+8    NaN
+dtype: float64
+#+end_example
+
+What happened here? First, we created a *DataFrame* using two partially-overlapping *Series*. When we did that, pandas aligned both *Series* where they did overlap, and then padded them with NaN to create a "rectangular" dataset. Second, when we operated a simple vector addition on the two *Series*, pandas only performed the operation where there were common indices. Typically, we'd /dropna()/ the superfluous indices after his type of operation
+
+#+BEGIN_SRC python :session
+(x + y).dropna()
+#+END_SRC
+
+#+RESULTS:
+: 3    3.0
+: 4    2.0
+: 5    9.0
+: dtype: float64
+
+This is particularly useful when you need to perform operations on data from multiple sources or datasets. Without labeled indexing, you could still accomplish this, but it requires significant book-keeping. Why do book-keeping by hand when pandas can do it for you?
+
+*** Function Mapping
+    
+    Sometimes you don't want to slice-and-dice a *DataFrame* to use a NumPy function, or there isn't a built-in statistical function to get at the quantity you want. In these cases, you can use the /.apply()/ or /.applymap()/ functions.
+   
+    #+BEGIN_SRC python :session
+ def data_range(x):
+     return x.max() - x.min()
+
+ df.apply(data_range)
+    #+END_SRC
+
+    #+RESULTS:
+    : x    9.0
+    : y    5.0
+    : dtype: float64
+
+
+ It's also possible to /apply()/ a function row-wise
+
+ #+BEGIN_SRC python :session
+ df.apply(data_range, axis=1)
+ #+END_SRC   
+
+ #+RESULTS:
+ #+begin_example
+ 0    0.0
+ 1    0.0
+ 2    0.0
+ 3    3.0
+ 4    0.0
+ 5    3.0
+ 6    0.0
+ 7    0.0
+ 8    0.0
+ dtype: float64
+ #+end_example
+
+ Additionally, you can construct new *DataFrames* by returing *Series* objects through your /apply()/-ed function, which is very useful for building summary tables
+
+ #+BEGIN_SRC python :session
+ def range_stats(x):
+     return pd.Series([x.min(), x.median(), x.max()], 
+                      index=['min', 'median', 'max'])
+
+ df.apply(range_stats)
+ #+END_SRC
+
+ #+RESULTS:
+ :           x    y
+ : min     0.0  1.0
+ : median  2.5  2.5
+ : max     9.0  6.0
+
+ Finally, you can apply functions element-wise using the /applymap()/ function, just as our original NumPy ufunc did. However, a more useful application is when you wish to use every element in a *DataFrame* as the argument to a function which cannot be easily vectorized. One illustrative example from the pandas documentation is getting a formatted string of each value in a *DataFrame*.
+
+*** Descriptive Statistics 
+
+    Pandas implements a large suite of common descriptive statistics to complement its functionalty in exploratory data analysis.
+
+ #+BEGIN_SRC python :session
+ n = 10
+ df = pd.DataFrame({'x': np.random.randn(n), 'y': np.random.randn(n)},
+                   index=range(1, n+1))
+ df.describe()
+ #+END_SRC
+
+ #+RESULTS:
+ :                x          y
+ : count  10.000000  10.000000
+ : mean    0.767688  -0.398642
+ : std     1.061752   1.038628
+ : min    -0.563382  -1.803119
+ : 25%     0.075686  -1.124569
+ : 50%     0.395356  -0.341030
+ : 75%     1.168716   0.143864
+ : max     2.769128   1.362395
+
+ #+BEGIN_SRC python :session
+ df.quantile(0.25)
+ #+END_SRC
+
+ #+RESULTS:
+ : x    0.075686
+ : y   -1.124569
+ : Name: 0.25, dtype: float64
+
+ #+BEGIN_SRC python :session
+ #def desc_stats(x):
+ #    return pd.Series([x.mean(), x.mad(), x.quantile(), x.var(), 
+ #                      x.max(), x.sumsum(), x.argmax(), x.indmax()],
+ #                     index=['mean', 'mad', '25%', 'var', 'max', 'cumsum', 'argmax', 'indmax'])
+ def desc_stats(x):
+     return pd.Series([x.mean(), x.mad(), x.quantile(.25), x.var(), 
+                       x.max(), x.argmax(), x.idxmax()],
+                      index=['mean', 'mad', '25%', 'var', 'max', 'argmax', 'idxmax'])
+ df.apply(desc_stats)
+ #+END_SRC
+
+ #+RESULTS:
+
+ #+BEGIN_SRC python :session
+ df.cumsum()
+ #+END_SRC
+
+ #+RESULTS:
+ #+begin_example
+            x         y
+ 1   1.228719  0.763317
+ 2   0.665337 -0.313218
+ 3   0.864680 -1.996506
+ 4   1.088271 -0.634110
+ 5   1.047579 -1.123748
+ 6   2.036286 -2.926867
+ 7   2.070752 -3.119290
+ 8   2.637873 -2.996848
+ 9   4.907751 -2.845843
+ 10  7.676878 -3.986423
+ #+end_example
+** Timeseries
+
+   A special case of tabular data which pandas excels at is /timeseries/ data. In this case, the index is not categorical or other labels - it's made of dates, times, or deltas between the two, either in regular intervals ("periods") or arbitrary ones.
+
+   Arithmetic involving dates and times can sometimes be confusing and painstaking to manually deal with. However, it abides by strict standards which are widely used throughout industry and other applications. Python and pandas provide useful tools for abstracting away much of the logic and details necessary to deal with time arithmetic, so that you can focus on your overall analysis and scientific questions.
+
+*** Time in Python
+
+    As an introduction, we want to briefly review the built-in time processing functionality that comes with python, thrugh the *datetime* module.
+
+#+BEGIN_SRC python :session
+from datetime import datetime
+
+now = datetime.now()
+now
+#+END_SRC
+
+#+RESULTS:
+: 2017-01-18 21:05:47.262488
+
+~now~ is a *datetime.datetime* type, which includes many helper functions and attributes
+
+#+BEGIN_SRC python :session
+now.year, now.month, now.day, now.hour
+#+END_SRC
+
+#+RESULTS:
+| 2017 | 1 | 18 | 21 |
+
+Arithmetic between *datetime*s is easily handled, and yields a special *datetime.timedelta* type
+
+#+BEGIN_SRC python :session
+datetime(2017, 1, 18) - datetime(2017, 1, 17, 6, 43)
+#+END_SRC
+
+#+RESULTS:
+: 17:17:00
+
+We could also create a *datetime.timedelta* and add it to an arbitrary *datetime.datetime*.
+
+#+BEGIN_SRC python :session
+from datetime import timedelta
+
+delta = timedelta(hours=3, minutes=30)
+delta + datetime(2017, 1, 18, 12, 15)
+#+END_SRC
+
+#+RESULTS:
+: 2017-01-18 15:45:00
+
+Often times, we want to print out the time in a special format. This is easy to do with the /strftime()/ function, which lets you use [[https://docs.python.org/3/library/datetime.html#strftime-strptime-behavior][a set of formatting directives]] to create your output.
+
+#+BEGIN_SRC python :session
+now.strftime("%A, %b %d at %I:%m%p")
+#+END_SRC
+
+#+RESULTS:
+: Wednesday, Jan 18 at 09:01PM
+
+Other times, you need the opposite functionality - a way to ingest formatted time stamps and create nimble *datetime.datetime* objects for arithmetic. In these cases, you can use the /strptime()/ function and hte same set of helper directives
+
+#+BEGIN_SRC python :session
+timestamp = "2017-01-18"
+datetime.strptime(timestamp, "%Y-%m-%d") - timedelta(hours=3, minutes=3)
+
+#+END_SRC
+
+#+RESULTS:
+: 2017-01-17 20:57:00
+
+*** Time Indices
+
+    pandas lets you use timestamps as your *Index*; doing so automatically creates a special type of *Series* called a *TimeSeries*.
+
+#+BEGIN_SRC python :session
+times = [datetime(2017, 1, day) for day in range(1, 31)]
+ts = pd.Series(np.random.randint(0, 10, len(times)), index=times)
+ts.head()
+#+END_SRC
+
+#+RESULTS:
+: 2017-01-01    5
+: 2017-01-02    2
+: 2017-01-03    1
+: 2017-01-04    9
+: 2017-01-05    8
+: dtype: int64
+
+Notice that the *Index* in this case is a little different than normal:
+
+#+BEGIN_SRC python :session
+ts.index[:5]
+#+END_SRC
+
+#+RESULTS:
+: DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03', '2017-01-04',
+:                '2017-01-05'],
+:               dtype='datetime64[ns]', freq=None)
+
+The datatype /datetime64[ns]/ is a special type provided by NumPy, which pandas automatically converts into a /Timestamp/ object when requested
+
+#+BEGIN_SRC python :session
+ts.index[5]
+#+END_SRC
+
+#+RESULTS:
+: 2017-01-06 00:00:00
+
+There are several utilities provided by pandas which can help you create *TimeSeries*. One important one to know about is the /date_range()/ function. You can construct an *Index* of *datetime* objects in two different ways using this function: 
+
+#+BEGIN_SRC python :session
+# Option 1) Specify a start/end datetime and a frequency string
+pd.date_range(start='1/1/2017', end='1/30/2017', freq='3D')
+#+END_SRC
+
+#+RESULTS:
+: DatetimeIndex(['2017-01-01', '2017-01-04', '2017-01-07', '2017-01-10',
+:                '2017-01-13', '2017-01-16', '2017-01-19', '2017-01-22',
+:                '2017-01-25', '2017-01-28'],
+:               dtype='datetime64[ns]', freq='3D')
+
+#+BEGIN_SRC python :session
+# Option 2) Specify a begin date, a frequency and a number of periods
+pd.date_range(start='1/1/2017', freq='2W', periods=6)
+#+END_SRC
+
+#+RESULTS:
+: DatetimeIndex(['2017-01-01', '2017-01-15', '2017-01-29', '2017-02-12',
+:                '2017-02-26', '2017-03-12'],
+:               dtype='datetime64[ns]', freq='2W-SUN')
+
+*** Time Selection
+
+    You may have noticed that we didn't need to provide *datetime.datetime* objects to /date_range()/. We absolutely could have! But pandas is smart enough to parse them for us in the majority of cases, particularly if we use a standard format like "DD/MM/YYYY". For the next few examples, let's suppose we have high-frequency (hourly) data from some month - perhaps temperature, windspeed, and wind direction data.
+
+#+BEGIN_SRC python :session
+times = pd.date_range(start='2017-01-01', end='2017-01-031', freq='1H')
+n = len(times)
+weather_data = pd.DataFrame({'temperature': np.random.randint(-10, 54, n),
+                             'wind_speed': np.abs(np.random.randn(n)),
+                             'wind_dir': np.random.randint(0, 360, n)},
+                            index=times)
+weather_data.head()
+#+END_SRC
+
+#+RESULTS:
+:                      temperature  wind_dir  wind_speed
+: 2017-01-01 00:00:00           35       329    0.215183
+: 2017-01-01 01:00:00           52       135    1.457206
+: 2017-01-01 02:00:00           38       187    0.261979
+: 2017-01-01 03:00:00           21        18    0.288636
+: 2017-01-01 04:00:00           28       120    0.226211
+
+Because times are ordered by nature, it's easy to slice through this data. Suppose we want to grab just data from one specific day in our dataset. We can use labeled indexing to easily get at this:
+
+#+BEGIN_SRC python :session
+weather_data.loc["1/13/2017"].head()
+#+END_SRC
+
+#+RESULTS:
+:                      temperature  wind_dir  wind_speed
+: 2017-01-13 00:00:00            7       347    0.473832
+: 2017-01-13 01:00:00           41       190    0.420291
+: 2017-01-13 02:00:00           -9        96    1.678991
+: 2017-01-13 03:00:00            7       332    0.156872
+: 2017-01-13 04:00:00           -2       285    0.336072
+
+We could also slice out an arbitrary 12-hour period using standard slicing semantics
+
+#+BEGIN_SRC python :session
+weather_data.loc["1/28/2017 21:00:00":"1/29/2017 03:00:00"]
+#+END_SRC
+
+#+RESULTS:
+:                      temperature  wind_dir  wind_speed
+: 2017-01-28 21:00:00            2       274    0.154289
+: 2017-01-28 22:00:00           -1       254    0.978059
+: 2017-01-28 23:00:00           48       261    0.431240
+: 2017-01-29 00:00:00           36       350    0.098431
+: 2017-01-29 01:00:00           41       308    0.723889
+: 2017-01-29 02:00:00           43       332    1.149204
+: 2017-01-29 03:00:00           28       264    0.377609
+
+Alternatively we could /truncate()/ the data
+
+#+BEGIN_SRC python :session
+weather_data.truncate(before="1/28/2017 12:00:00", after="1/31/2017").head()
+#+END_SRC
+
+#+RESULTS:
+:                      temperature  wind_dir  wind_speed
+: 2017-01-28 12:00:00            3       276    0.241378
+: 2017-01-28 13:00:00            1        42    0.858274
+: 2017-01-28 14:00:00           53         8    0.591372
+: 2017-01-28 15:00:00           48        72    1.599505
+: 2017-01-28 16:00:00           39       181    0.448236
+
+*** Resampling 
+
+    Resampling generally describes converting a timeseries to a different frequency, either higher ("upsampling") or lower ("downsampling" or "aggregating"). In  many climate applications we apply downsampling to summarize or aggregate our data. To accomplish this, we lean heavily on our labeled timeseries index values to figure out which data points go into which bins.
+
+    Via pandas, many downsampling operations are trivial through the /resample()/ method. Using this tool requires a two-step chain - calling a method on a method. For example, we can calculate daily maxima for our sample weather data
+
+#+BEGIN_SRC python :session
+daily = weather_data.resample('D').max()
+daily.head()
+#+END_SRC
+
+#+RESULTS:
+:             temperature  wind_dir  wind_speed
+: 2017-01-01           52       356    2.288290
+: 2017-01-02           49       357    1.668882
+: 2017-01-03           53       319    1.656076
+: 2017-01-04           51       356    2.099528
+: 2017-01-05           52       331    1.673153
+
+In the first step, we call the /resample()/ function with a set of arugments that let us fine-tune in what intervals we wish to sample over; we can set the frequency, change how our periods are defined, and more. What this does is break our data into chunks called "groups". More on that later.
+
+The second step applies a function to each of those groups that the resampler found. Pandas has many useful functions built in, although we coud use the same /apply()/ technique from before if we had a custom function. The same maxima can be calculated like this:
+
+#+BEGIN_SRC python :session
+weather_data.resample('D').apply(lambda x: np.max(x)).head()
+#+END_SRC
+
+#+RESULTS:
+:             temperature  wind_dir  wind_speed
+: 2017-01-01           52       356    2.288290
+: 2017-01-02           49       357    1.668882
+: 2017-01-03           53       319    1.656076
+: 2017-01-04           51       356    2.099528
+: 2017-01-05           52       331    1.673153
+
+The opposite of upsampling, downsampling, is a form of interpolation. There are many naive ways to perform this operation. Ideally, you should fit some sort of statistical model and use that to perform infilling to whatever timestamps you need. Pandas provides functionality to help with this, but that's beyond the scope of this initial foray. Instead, we just want to observe what happens when we try to upsample from lower to higher frequency
+
+#+BEGIN_SRC python :session
+weekly = weather_data.loc['2017-01-01':'2017-01-10'].resample('W-WED').mean()
+weekly
+#+END_SRC
+
+#+RESULTS:
+:             temperature    wind_dir  wind_speed
+: 2017-01-04    21.697917  183.250000    0.739204
+: 2017-01-11    22.201389  173.256944    0.772146
+
+#+BEGIN_SRC python :session
+weekly.resample('D').ffill()
+#+END_SRC
+
+#+RESULTS:
+:             temperature    wind_dir  wind_speed
+: 2017-01-04    21.697917  183.250000    0.739204
+: 2017-01-05    21.697917  183.250000    0.739204
+: 2017-01-06    21.697917  183.250000    0.739204
+: 2017-01-07    21.697917  183.250000    0.739204
+: 2017-01-08    21.697917  183.250000    0.739204
+: 2017-01-09    21.697917  183.250000    0.739204
+: 2017-01-10    21.697917  183.250000    0.739204
+: 2017-01-11    22.201389  173.256944    0.772146
+
+The /ffill()/ method forward-fills your data. 
+
+
+*** Other topics not covered 
+
+    - More advanced time manipulations: Period and PeriodIndex, Frequencies, etc
+    - Time zones (fully supported)
+    - Date Offset arithmetic
+    - Shifting
+    - Generating more complex date/time ranges
+
+** Plotting
+
+** Advanced Topics
+
+*** Split-Apply-Combine
+
+*** Data Transformation 
+* Part 2: xarray
+
+* Reference At-A-Glance 
+
+* Bibliography
+
+* Flyer Material :noexport:
+
+** Abstract
+
+   Working in climate science today means getting your hands dirty with all sorts of data from many different sources: differential equations solvers, climate model archives, raw observations and instrument data, re-analysis and data assimilation products, remote sensing, and much, much more. Wrestling this data can be a real pain in the butt. But, it doesn't have to be! Like a carpenter tackling a complicated project, as a researcher, your life can be much easier if you choose the right tool for the job, and lean on the work of dedicated toolmakers. 
+
+   In this hand-on workshop, we'll introduce two powerful tools from the Python data science ecosystem: *[[http://pandas.pydata.org/][pandas]]*, a library which provides a set of easy-to-use, high performance data structures for analyzing tabular data, and *[[http://xarray.pydata.org/en/stable/][xarray]]*, an extension and implementation of the Common Data Model widely used among the Earth sciences for handling mult-dimensional arrays (think netCDF or HDF-EOS). No experience with either tool is required, although a cursory familiarity with Python is is helpful. If you want to enter some commands as I present the material, I've included a "Getting Started" guide which will quickly help you get a working Python installation with both of these libraries ready to go.
+
+** Getting Started 
+
+   For this interactive workshop, you'll need a working Python 3 installation and a handful of libraries installed. What follows are two sets of instructions, written for different expertise levels and familiarity with Python, followed by a universal guide for downloading some of the data we'll play with.
+
+*** Python Setup Instructions
+   
+**** I'm a total beginner and have never used Python! 
+
+     Don't worry, I've got you covered! Head on over to [[https://www.continuum.io/downloads][the website for the Anaconda Python Distribution]]. This is a "batteries included" Python installation. On the website, you should see a panel like below:
+
+#+CAPTION: Anaconda Python Distribution downloads page
+[[./figs/anaconda_install.png]]
+
+     Choose your operating system (1). This will slightly change the contents of the main panel, but you'll always want to choose one of the Python 3.5 installations to the right (2). Go for the 64-bit installer if available, or the graphical installer. Installation is pretty straightforward and only involves a step or two, which are clearly written on the page (3). 
+
+     This will install Anaconda to a default location (probably your home directory, =~/=) and adjust your shell configuration script to properly set your =$PATH= - the variable your shell looks at to figure out where to find programs. To make sure that everything is working fine, go to your favorite terminal and execute:
+
+#+BEGIN_SRC shell
+$ echo $PATH
+/home/my_username/anaconda/bin:
+#+END_SRC
+
+#+RESULTS:
+
+     You should see something like the path indicated above, alongside any other things you have loaded by default. Next, we need to try to open a Python interpreter. However, the default Python interpreter (like the MATLAB, R, or IDL command line) is pretty wimpy. We're going to use a super-charged one, the [[https://ipython.org/][IPython interpreter]]. Open it by entering the command *ipython* (python with an "i" in front) from your command line. You should see something like this:
+
+#+CAPTION: Opening the IPython interpter
+[[./figs/terminal.png]]
+
+     The most important thing is the very first line; it should read something like /Python 3.5.2 | Continuum Analytics, Inc./. If this is the case, then you're all set. If not, contact Daniel Rothenberg (darothen@mit.edu) for help. 
+
+**** I know my Python basics already, and have my own setup
+
+     In this case, just make sure you have all the packages we're going to use. Using either *conda* or *pip*, install the following:
+
+     - ipython
+     - numpy
+     - matplotlib
+     - pandas
+     - xarray
+
+*** Sample Data
+       
+    We'll use some example data from GISS and the US Historical Climatology Network. The easiest way to get it is to run the following shell script:
+
+#+BEGIN_SRC shell
+#!/usr/bin/env bash
+
+# GISTEMP gridded data
+for fn in gistemp250; do
+    wget http://data.giss.nasa.gov/pub/gistemp/${fn}.nc.gz
+    gzip -d ${fn}.nc.gz
+done
+
+# GISTEMP spatially-averaged anomalies
+for fn in GLB SH NH; do
+    wget http://data.giss.nasa.gov/gistemp/tabledata_v3/${fn}.Ts+dSST.txt
+    wget http://data.giss.nasa.gov/gistemp/tabledata_v3/${fn}.Ts+dSST.csv
+done
+
+# USHCN data
+wget http://cdiac.ornl.gov/ftp/ushcn_v2.5_monthly/readme.txt
+wget http://cdiac.ornl.gov/ftp/ushcn_v2.5_monthly/ushcn-stations.txt
+
+wget http://cdiac.ornl.gov/ftp/ushcn_v2.5_monthly/ushcn2014_tob_tmax.txt.gz
+gzip -d ushcn2014_tob_tmax.txt.gz
+
+#wget http://cdiac.ornl.gov/ftp/ushcn_daily/us.txt.gz
+#gzip -d us.txt.gz
+#+END_SRC
+
+#+RESULTS:
+
+Of course, you can download all of these directly from their indicated web address if you prefer. The final line is commented out, because the end product is a very large (1.7 GB) file which you don't necessarily need to have access to (although I'll show a final example playing with it that might be of interest).
+
+* Notes :noexport:
+
+** Outlines
+*** pandas
+**** History
+**** Basics and Overview
+***** Series
+***** DataFrames
+***** Reading Data from CSV / Tabular
+***** Indexing and Selections  
+**** Arithmetic 
+***** Basic Arithmetic 
+***** Function Mapping
+***** Statistics
+***** Missing Data
+**** Timeseries
+***** Time Indices
+***** Time Selections and Filtering
+***** Resampling
+**** Data Transformation
+***** Merging and Combining Datasets
+***** Reshaping Datasets
+**** Plotting
+**** Advanced Topics 
+*** xarray
+
+** Data  
+   - GISTEMP data can be found [[http://data.giss.nasa.gov/gistemp/][here]], in many different formats
+   - USHCN data can be found [[http://cdiac.ornl.gov/epubs/ndp/ushcn/ushcn.html][here]]
+
+** Book / Presentation Outlines 
+   - [[file:~/Dropbox%20(Personal)/Apps/O'Reilly%20Media/Python%20for%20Data%20Analysis/Python%20for%20Data%20Analysis.pdf][Python for Data Aanlysis]] has some nice examples on using Pandas:
+     - Chapter 5 - Pandas basics / overview
+     - Chapter 6 - Reading data into Pandas
+     - Chapter 7 - Data wrangling/munging in Pandas
+     - Chapter 8 - Plotting / visualization
+     - Chapter 9 - Group-apply-combine operations
+     - Chapter 10 - Timeseries
+   - [[https://www.datacamp.com/community/blog/python-pandas-cheat-sheet][Pandas Cheat Sheet]] / [[https://www.datacamp.com/community/tutorials/pandas-tutorial-dataframe-python#gs.OgWbZCQ][Pandas DataFrame tutorial]]
+   - [[http://markthegraph.blogspot.com/2014/12/updated-cheat-sheets-python-pandas-and.html][Updated Python Cheat Sheets]]
+** From Python to Numpy
+   http://www.labri.fr/perso/nrougier/from-python-to-numpy/
+
+** Slides with Jupyter Notebook
+   - http://echorand.me/presentation-slides-with-jupyter-notebook.html#.WH1mIrYrKEI
+   - https://neuroscience.telenczuk.pl/?p=607
+   - http://chris-said.io/2016/02/13/how-to-make-polished-jupyter-presentations-with-optional-code-visibility/
+   - https://seqqc.wordpress.com/2015/02/22/make-slides-with-ipython-notebook/
+** Slides from org
+   - http://orgmode.org/worg/org-tutorials/non-beamer-presentations.html#org1dfc7f1
