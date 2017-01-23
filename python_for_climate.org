@@ -1368,6 +1368,10 @@ gzip -d ushcn2014_tob_tmax.txt.gz
 Of course, you can download all of these directly from their indicated web address if you prefer. The final line is commented out, because the end product is a very large (1.7 GB) file which you don't necessarily need to have access to (although I'll show a final example playing with it that might be of interest).
 
 * Notes :noexport:
+** Practice Talk
+   - Show floating point examples for applied/vectorized functions
+   - Skip multi-indexing; replace with basic plotting
+   - Skip repeat of DataFrame structure
 
 ** Outlines
 *** pandas

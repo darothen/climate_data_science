@@ -1,7 +1,7 @@
 """ Utilities to accompany Python for Climate Data Science """
 
 import numpy as np
-import pandas as pdb
+import pandas as pd
 import xarray as xr
 
 def read_ushcn_data(field, data_fn="data/ushcn2014_tob_tmax.txt",
@@ -42,8 +42,9 @@ def read_ushcn_data(field, data_fn="data/ushcn2014_tob_tmax.txt",
     ds_flags = list(range(1, 9)) + ['B', 'D', 'G']
 
     month_dfs = []
+    print("Processing months...")
     for i, month in enumerate(months, 1):
-        print(i)
+        print("   " + month)
         if month == 'ANN':
             continue
         month_df = (
